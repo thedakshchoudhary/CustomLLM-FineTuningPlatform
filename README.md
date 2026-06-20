@@ -1,189 +1,165 @@
-<!---
-Copyright 2023 The HuggingFace Team. All rights reserved.
+#    CoustomLLM Fine Tuning Platform 
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+## State-of-the-art Parameter-Efficient Fine-Tuning Methods
 
-    http://www.apache.org/licenses/LICENSE-2.0
+PEFT (Parameter-Efficient Fine-Tuning) is a library for adapting large pretrained models to downstream tasks by training only a small subset of additional parameters instead of updating every parameter in the model.
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
--->
+This approach significantly reduces computational requirements, GPU memory usage, and storage costs while achieving performance comparable to full fine-tuning.
 
-<h1 align="center"> <p>🤗 PEFT</p></h1>
-<h3 align="center">
-    <p>State-of-the-art Parameter-Efficient Fine-Tuning (PEFT) methods</p>
-</h3>
+PEFT is designed to work with modern machine learning workflows and supports efficient training and inference for large language models and diffusion models.
 
-Fine-tuning large pretrained models is often prohibitively costly due to their scale. Parameter-Efficient Fine-Tuning (PEFT) methods enable efficient adaptation of large pretrained models to various downstream applications by only fine-tuning a small number of (extra) model parameters instead of all the model's parameters. This significantly decreases the computational and storage costs. Recent state-of-the-art PEFT techniques achieve performance comparable to fully fine-tuned models.
+---
 
-PEFT is integrated with Transformers for easy model training and inference, Diffusers for conveniently managing different adapters, and Accelerate for distributed training and inference for really big models.
+## Features
 
-> [!TIP]
-> Visit the [PEFT](https://huggingface.co/PEFT) organization to read about the PEFT methods implemented in the library and to see notebooks demonstrating how to apply these methods to a variety of downstream tasks. Click the "Watch repos" button on the organization page to be notified of newly implemented methods and notebooks!
+* Parameter-efficient adaptation of large pretrained models
+* Reduced GPU memory consumption during training
+* Significantly smaller checkpoints compared to full fine-tuning
+* Support for multiple PEFT methods, including:
 
-Check the PEFT Adapters API Reference section for a list of supported PEFT methods, and read the [Adapters](https://huggingface.co/docs/peft/en/conceptual_guides/adapter), [Soft prompts](https://huggingface.co/docs/peft/en/conceptual_guides/prompting), and [IA3](https://huggingface.co/docs/peft/en/conceptual_guides/ia3) conceptual guides to learn more about how these methods work.
+  * LoRA (Low-Rank Adaptation)
+  * Prompt Tuning
+  * Prefix Tuning
+  * IA³
+  * Other adapter-based techniques
+* Support for distributed training and inference
+* Compatibility with quantized models for low-resource environments
 
-## Quickstart
+---
 
-Install PEFT from pip:
+## Installation
 
 ```bash
 pip install peft
 ```
 
-Prepare a model for training with a PEFT method such as LoRA by wrapping the base model and PEFT configuration with `get_peft_model`. For the bigscience/mt0-large model, you're only training 0.19% of the parameters!
+---
+
+## Quick Start
+
+### Training with LoRA
 
 ```python
 from transformers import AutoModelForCausalLM
 from peft import LoraConfig, TaskType, get_peft_model
+import torch
 
 device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+
 model_id = "Qwen/Qwen2.5-3B-Instruct"
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map=device
+)
+
 peft_config = LoraConfig(
     r=16,
     lora_alpha=32,
-    task_type=TaskType.CAUSAL_LM,
-    # target_modules=["q_proj", "v_proj", ...]  # optionally indicate target modules
+    task_type=TaskType.CAUSAL_LM
 )
+
 model = get_peft_model(model, peft_config)
 model.print_trainable_parameters()
-# prints: trainable params: 3,686,400 || all params: 3,089,625,088 || trainable%: 0.1193
 
-# now perform training on your dataset, e.g. using transformers Trainer, then save the model
 model.save_pretrained("qwen2.5-3b-lora")
 ```
 
-To load a PEFT model for inference:
+---
+
+### Loading a Trained Adapter
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
+import torch
 
 device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+
 model_id = "Qwen/Qwen2.5-3B-Instruct"
+
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map=device)
-model = PeftModel.from_pretrained(model, "qwen2.5-3b-lora")
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map=device
+)
 
-inputs = tokenizer("Preheat the oven to 350 degrees and place the cookie dough", return_tensors="pt")
-outputs = model.generate(**inputs.to(device), max_new_tokens=50)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+model = PeftModel.from_pretrained(
+    model,
+    "qwen2.5-3b-lora"
+)
 
-# prints something like: Preheat the oven to 350 degrees and place the cookie dough in a baking dish [...]
+inputs = tokenizer(
+    "Preheat the oven to 350 degrees and place the cookie dough",
+    return_tensors="pt"
+)
+
+outputs = model.generate(
+    **inputs.to(device),
+    max_new_tokens=50
+)
+
+print(
+    tokenizer.decode(
+        outputs[0],
+        skip_special_tokens=True
+    )
+)
 ```
 
-## Why you should use PEFT
+---
 
-There are many benefits of using PEFT but the main one is the huge savings in compute and storage, making PEFT applicable to many different use cases.
+## Why PEFT?
 
-### High performance on consumer hardware
+### Reduced Compute Requirements
 
-Consider the memory requirements for training the following models on the [ought/raft/twitter_complaints](https://huggingface.co/datasets/ought/raft/viewer/twitter_complaints) dataset with an A100 80GB GPU with more than 64GB of CPU RAM.
+PEFT trains only a small fraction of model parameters, enabling efficient fine-tuning of large models that would otherwise exceed available hardware resources.
 
-|   Model         | Full Finetuning | PEFT-LoRA PyTorch  | PEFT-LoRA DeepSpeed with CPU Offloading |
-| --------- | ---- | ---- | ---- |
-| bigscience/T0_3B (3B params) | 47.14GB GPU / 2.96GB CPU  | 14.4GB GPU / 2.96GB CPU | 9.8GB GPU / 17.8GB CPU |
-| bigscience/mt0-xxl (12B params) | OOM GPU | 56GB GPU / 3GB CPU | 22GB GPU / 52GB CPU |
-| bigscience/bloomz-7b1 (7B params) | OOM GPU | 32GB GPU / 3.8GB CPU | 18.1GB GPU / 35GB CPU |
+### Reduced Storage
 
-With LoRA you can fully finetune a 12B parameter model that would've otherwise run out of memory on the 80GB GPU, and comfortably fit and train a 3B parameter model. When you look at the 3B parameter model's performance, it is comparable to a fully finetuned model at a fraction of the GPU memory.
+PEFT adapters are typically only a few megabytes in size compared to gigabyte-scale full model checkpoints, making it practical to maintain multiple task-specific adaptations of the same base model.
 
-|   Submission Name        | Accuracy |
-| --------- | ---- |
-| Human baseline (crowdsourced) |	0.897 |
-| Flan-T5 | 0.892 |
-| lora-t0-3b | 0.863 |
+### High Performance
 
-> [!TIP]
-> The bigscience/T0_3B model performance isn't optimized in the table above. You can squeeze even more performance out of it by playing around with the input instruction templates, LoRA hyperparameters, and other training related hyperparameters. The final checkpoint size of this model is just 19MB compared to 11GB of the full bigscience/T0_3B model. Learn more about the advantages of finetuning with PEFT in this [blog post](https://www.philschmid.de/fine-tune-flan-t5-peft).
+Despite training only a small number of parameters, PEFT methods achieve performance that is often comparable to full fine-tuning.
 
-### Quantization
+### Quantization Support
 
-Quantization is another method for reducing the memory requirements of a model by representing the data in a lower precision. It can be combined with PEFT methods to make it even easier to train and load LLMs for inference.
+PEFT can be combined with model quantization techniques to further reduce memory consumption and enable training and inference on consumer-grade hardware.
 
-* Learn how to finetune [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf) with QLoRA and the [TRL](https://huggingface.co/docs/trl/index) library on a 16GB GPU in the [Finetune LLMs on your own consumer hardware using tools from PyTorch and Hugging Face ecosystem](https://pytorch.org/blog/finetune-llms/) blog post.
-* Learn how to finetune a [openai/whisper-large-v2](https://huggingface.co/openai/whisper-large-v2) model for multilingual automatic speech recognition with LoRA and 8-bit quantization in this [notebook](https://colab.research.google.com/drive/1DOkD_5OUjFa0r5Ik3SgywJLJtEo2qLxO?usp=sharing) (see this [notebook](https://colab.research.google.com/drive/1vhF8yueFqha3Y3CpTHN6q9EVcII9EYzs?usp=sharing) instead for an example of streaming a dataset).
+---
 
-### Save compute and storage
-
-PEFT can help you save storage by avoiding full finetuning of models on each of downstream task or dataset. In many cases, you're only finetuning a very small fraction of a model's parameters and each checkpoint is only a few MBs in size (instead of GBs). These smaller PEFT adapters demonstrate performance comparable to a fully finetuned model. If you have many datasets, you can save a lot of storage with a PEFT model and not have to worry about catastrophic forgetting or overfitting the backbone or base model.
-
-## PEFT integrations
-
-PEFT is widely supported across the Hugging Face ecosystem because of the massive efficiency it brings to training and inference.
-
-### Diffusers
-
-The iterative diffusion process consumes a lot of memory which can make it difficult to train. PEFT can help reduce the memory requirements and reduce the storage size of the final model checkpoint. For example, consider the memory required for training a Stable Diffusion model with LoRA on an A100 80GB GPU with more than 64GB of CPU RAM. The final model checkpoint size is only 8.8MB!
-
-|   Model         | Full Finetuning | PEFT-LoRA  | PEFT-LoRA with Gradient Checkpointing  |
-| --------- | ---- | ---- | ---- |
-| CompVis/stable-diffusion-v1-4 | 27.5GB GPU / 3.97GB CPU | 15.5GB GPU / 3.84GB CPU | 8.12GB GPU / 3.77GB CPU | 
-
-> [!TIP]
-> Take a look at the [examples/lora_dreambooth/train_dreambooth.py](examples/lora_dreambooth/train_dreambooth.py) training script to try training your own Stable Diffusion model with LoRA, and play around with the [smangrul/peft-lora-sd-dreambooth](https://huggingface.co/spaces/smangrul/peft-lora-sd-dreambooth) Space which is running on a T4 instance. Learn more about the PEFT integration in Diffusers in this [tutorial](https://huggingface.co/docs/peft/main/en/tutorial/peft_integrations#diffusers).
+## Supported Integrations
 
 ### Transformers
 
-PEFT is directly integrated with [Transformers](https://huggingface.co/docs/transformers/main/en/peft). After loading a model, call `add_adapter` to add a new PEFT adapter to the model:
+Supports adding, loading, and switching between adapters on transformer-based models.
 
-```python
-from peft import LoraConfig
-model = ...  # transformers model
-peft_config = LoraConfig(...)
-model.add_adapter(lora_config, adapter_name="lora_1")
-```
+### Diffusers
 
-To load a trained PEFT adapter, call `load_adapter`:
-
-```python
-model = ...  # transformers model
-model.load_adapter(<path-to-adapter>, adapter_name="lora_1")
-```
-
-And to switch between different adapters, call `set_adapter`:
-
-```python
-model.set_adapter("lora_2")
-```
-
-The Transformers integration doesn't include all the functionalities offered in PEFT, such as methods for merging the adapter into the base model.
+Enables memory-efficient training and fine-tuning of diffusion models with significantly smaller checkpoints.
 
 ### Accelerate
 
-[Accelerate](https://huggingface.co/docs/accelerate/index) is a library for distributed training and inference on various training setups and hardware (GPUs, TPUs, Apple Silicon, etc.). PEFT models work with Accelerate out of the box, making it really convenient to train really large models or use them for inference on consumer hardware with limited resources.
+Provides compatibility with distributed training and inference across various hardware configurations.
 
 ### TRL
 
-PEFT can also be applied to training LLMs with RLHF components such as the ranker and policy. Get started by reading:
+Supports reinforcement learning workflows and preference optimization techniques for large language models.
 
-* [Fine-tune a Mistral-7b model with Direct Preference Optimization](https://towardsdatascience.com/fine-tune-a-mistral-7b-model-with-direct-preference-optimization-708042745aac) with PEFT and the [TRL](https://huggingface.co/docs/trl/index) library to learn more about the Direct Preference Optimization (DPO) method and how to apply it to a LLM.
-* [Fine-tuning 20B LLMs with RLHF on a 24GB consumer GPU](https://huggingface.co/blog/trl-peft) with PEFT and the [TRL](https://huggingface.co/docs/trl/index) library, and then try out the [gpt2-sentiment_peft.ipynb](https://github.com/huggingface/trl/blob/main/examples/notebooks/gpt2-sentiment.ipynb) notebook to optimize GPT2 to generate positive movie reviews.
-* [StackLLaMA: A hands-on guide to train LLaMA with RLHF](https://huggingface.co/blog/stackllama) with PEFT, and then try out the [stack_llama/scripts](https://github.com/huggingface/trl/tree/main/examples/research_projects/stack_llama/scripts) for supervised finetuning, reward modeling, and RL finetuning.
+---
 
-## Model support
+## Model Support
 
-Use this [Space](https://stevhliu-peft-methods.hf.space) or check out the [docs](https://huggingface.co/docs/peft/main/en/index) to find which models officially support a PEFT method out of the box. Even if you don't see a model listed below, you can manually configure the model config to enable PEFT for a model. Read the [New transformers architecture](https://huggingface.co/docs/peft/main/en/developer_guides/custom_models#new-transformers-architectures) guide to learn how.
+PEFT supports a wide range of transformer and diffusion architectures. Models can be adapted using built-in PEFT methods or manually configured to enable parameter-efficient fine-tuning.
 
-## Contribute
+---
 
-If you would like to contribute to PEFT, please check out our [contribution guide](https://huggingface.co/docs/peft/developer_guides/contributing).
+## Core Benefits
 
-## Citing 🤗 PEFT
-
-To use 🤗 PEFT in your publication, please cite it by using the following BibTeX entry.
-
-```bibtex
-@Misc{peft,
-  title =        {{PEFT}: State-of-the-art Parameter-Efficient Fine-Tuning methods},
-  author =       {Sourab Mangrulkar and Sylvain Gugger and Lysandre Debut and Younes Belkada and Sayak Paul and Benjamin Bossan and Marian Tietz},
-  howpublished = {\url{https://github.com/huggingface/peft}},
-  year =         {2022}
-}
-```
+* Lower memory requirements
+* Faster experimentation
+* Smaller checkpoints
+* Efficient multi-task adaptation
+* Reduced training costs
+* Scalable fine-tuning of large models
+* Easy deployment of task-specific adapters
